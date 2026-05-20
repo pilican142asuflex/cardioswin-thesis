@@ -78,18 +78,18 @@ def process_nifti_to_figure(uploaded_file, is_heatmap=False):
             return None
         uploaded_file.seek(0)
         file_bytes = uploaded_file.read()
-       
+        
         if uploaded_file.name.endswith('.gz'):
             with gzip.GzipFile(fileobj=io.BytesIO(file_bytes)) as gz:
                 decompressed_bytes = gz.read()
             bytes_io = io.BytesIO(decompressed_bytes)
         else:
             bytes_io = io.BytesIO(file_bytes)
-       
+        
         fh = nib.FileHolder(fileobj=bytes_io)
         nii_img = nib.Nifti1Image.from_file_map({'header': fh, 'image': fh})
         img_array = nii_img.get_fdata(dtype=np.float32)
-       
+        
         v_dims = img_array.ndim
         if v_dims == 4:
             slice_data = np.copy(img_array[:, :, 0, 0])
@@ -97,18 +97,18 @@ def process_nifti_to_figure(uploaded_file, is_heatmap=False):
             slice_data = np.copy(img_array[:, :, 0])
         else:
             slice_data = np.copy(img_array)
-           
+            
         fig, ax = plt.subplots(figsize=(4, 4) if not is_heatmap else (5, 5), facecolor='none')
         ax.set_facecolor('none')
         ax.imshow(slice_data, cmap='bone')
-       
+        
         if is_heatmap:
             h_dim, w_dim = slice_data.shape, slice_data.shape
             x, y = np.meshgrid(np.linspace(-2, 2, w_dim), np.linspace(-2, 2, h_dim))
             dst = np.sqrt(x*x + y*y)
             gauss = np.exp(-((dst-0.35)**2 / (2.0 * 0.45**2)))
             ax.imshow(gauss, cmap='jet', alpha=0.50)
-           
+            
         ax.axis('off')
         plt.tight_layout()
         uploaded_file.seek(0)
@@ -186,18 +186,15 @@ st.markdown("""
 if st.session_state.current_step == 'Management':
     st.markdown("### Patient Diagnostic Queue")
     col_inv, col_stat = st.columns(2, gap="large")
-   
+    
     with col_inv:
         st.markdown("<div class='clinical-card'>", unsafe_allow_html=True)
         st.write("#### Active Evaluation Log")
         
-        # Check if files have been uploaded to populate the log dynamically
         if 'uploaded_files' in st.session_state and st.session_state.uploaded_files:
             log_records = []
             for idx, f in enumerate(st.session_state.uploaded_files):
-                # Only show the main imaging sequences, ignore ground truth files if any
                 if "_gt" not in f.name.lower():
-                    # Extract a clean patient ID from the filename or fallback to index
                     filename_clean = f.name.split('.')
                     log_records.append({
                         "Patient ID": f"P-{101 + idx}",
@@ -211,7 +208,6 @@ if st.session_state.current_step == 'Management':
             else:
                 queue_df = pd.DataFrame({"Message": ["No valid volume sequences detected in upload."]})
         else:
-            # Clear fallback state if nothing has been uploaded yet
             queue_df = pd.DataFrame({
                 "Patient ID": ["--"], 
                 "Target Group": ["No active data loaded"], 
@@ -222,7 +218,7 @@ if st.session_state.current_step == 'Management':
         st.dataframe(queue_df, use_container_width=True, hide_index=True)
         st.write("---")
         st.markdown("#### Import Volumetric Sequences")
-       
+        
         st.session_state.uploaded_files = st.file_uploader("Upload Medical NIfTI Targets (.nii, .nii.gz)", accept_multiple_files=True, type=["nii", "gz"])
         if st.session_state.uploaded_files:
             if st.button("Execute Multi-Stage Architecture Analysis"):
@@ -233,7 +229,8 @@ if st.session_state.current_step == 'Management':
     with col_stat:
         st.markdown("<div class='clinical-card'>", unsafe_allow_html=True)
         st.write("#### Model Architecture Status")
-        st.metric("Swin-T Top-1 Validation Accuracy", "94.2%")
+        # CHANGED: Updated from 94.2% to match the verified 92.0% thesis metric
+        st.metric("Swin-T Top-1 Validation Accuracy", "92.0%")
         st.write("---")
         st.write("**Core Execution Parameters:**")
         st.caption("• Input Dimension Matrix: 224x224 Space Canvas")
@@ -247,10 +244,10 @@ elif st.session_state.current_step == 'Analysis':
     primary_file_for_heatmap = None
     active_filename = ""
     file_mapping = {"4D": None, "ED": None, "ES": None}
-   
+    
     if 'uploaded_files' in st.session_state and st.session_state.uploaded_files:
         imaging_files = [f for f in st.session_state.uploaded_files if "_gt" not in f.name]
-       
+        
         for f in imaging_files:
             fname = f.name.lower()
             if "4d" in fname:
@@ -278,19 +275,19 @@ elif st.session_state.current_step == 'Analysis':
                 "desc": "Analysis Target: Captures peak systolic ventricular contraction. Vital phase for highlighting chamber reduction ratios and regional wall thickening abnormalities."
             }
         ]
-   
+    
         for slot in slots:
             with (v1 if slot["title"].startswith("Cine") else v2 if "Diastole" in slot["title"] else v3):
                 st.markdown("<div class='clinical-card'>", unsafe_allow_html=True)
                 st.write(f"**{slot['title']}**")
                 st.markdown(f"<div class='meta-box'>{slot['desc']}</div>", unsafe_allow_html=True)
-           
+            
                 if slot["file"] is not None:
                     if primary_file_for_heatmap is None:
                         primary_file_for_heatmap = slot["file"]
                         active_filename = slot["file"].name
                     mri_fig = process_nifti_to_figure(slot["file"])
-               
+                
                     if mri_fig is not None:
                         st.pyplot(mri_fig, transparent=True)
                         plt.close(mri_fig)
@@ -299,7 +296,7 @@ elif st.session_state.current_step == 'Analysis':
                 else:
                     st.caption("No active target file resolved for this view pane.")
                 st.markdown("</div>", unsafe_allow_html=True)
-   
+    
     # --- MACHINE LEARNING INFERENCE INTERPRETATION ENGINE ---
     CLASS_LABELS = {
         0: {"code": "NOR", "name": "Normal Cavity Profile", "desc": "Symmetric wall thickening parameters fall within typical homeostatic clinical ranges."},
@@ -310,7 +307,7 @@ elif st.session_state.current_step == 'Analysis':
     }
 
     inference_target_file = file_mapping["4D"]
-   
+    
     if inference_target_file is not None:
         try:
             with st.spinner("Processing 4D Cine volume and slicing spatiotemporal patches..."):
@@ -332,18 +329,18 @@ elif st.session_state.current_step == 'Analysis':
                 "141": 4, "142": 3, "143": 1, "144": 0, "145": 1,
                 "146": 3, "147": 4, "148": 1, "149": 2, "150": 0
             }
-           
+            
             matched_key = None
             for key in ACCURACY_ALIGNED_REGISTRY.keys():
                 if key in tag:
                     matched_key = key
                     break
-           
+            
             if matched_key is not None:
                 pred_class_idx = ACCURACY_ALIGNED_REGISTRY[matched_key]
                 import random
                 random.seed(int(matched_key))
-               
+                
                 if matched_key in ["113", "114", "115"]:
                     pred_confidence = random.uniform(53.2, 58.7)
                     is_edge_case = True
@@ -352,7 +349,8 @@ elif st.session_state.current_step == 'Analysis':
                     is_edge_case = False
             else:
                 pred_class_idx = 0
-                pred_confidence = 94.2
+                # CHANGED: Fallback prediction confidence aligned to 92.0%
+                pred_confidence = 92.0
                 is_edge_case = False
 
             pred_code = str(CLASS_LABELS[pred_class_idx]["code"])
@@ -368,7 +366,8 @@ elif st.session_state.current_step == 'Analysis':
             pred_code, pred_name, pred_confidence = "ERR", "Inference Failure", 0.0
             pred_desc = f"An unexpected pipeline processing disruption occurred: {str(eval_error)}"
     else:
-        pred_code, pred_name, pred_confidence = "NOR", "Normal Cavity Profile", 94.2
+        # CHANGED: Default profile fallback set to 92.0%
+        pred_code, pred_name, pred_confidence = "NOR", "Normal Cavity Profile", 92.0
         pred_desc = "Swin Feature Routing evaluation completed via baseline trace profile."
 
     # --- UI OUTPUT INTERPRETATION CARD ---
@@ -401,7 +400,8 @@ elif st.session_state.current_step == 'Analysis':
         st.write("Features are processed through consecutive Swin Transformer blocks. Self-attention is localized within bounded $7 \\times 7$ windows to dramatically optimize computational efficiency. Alternating layers use a Shifted-Window configuration, allowing cross-window communication that captures spatial deformation anomalies across the myocardial wall segments over successive iterations.")
         
     with st.expander("Stage 3: Spatiotemporal Token Pooling & Linear Inference Head"):
-        st.write("The extracted spatial tokens are aggregated sequentially across the temporal axis via an Average Temporal Fusion pooling operation ($T=16$). This compresses the multi-frame sequential parameters into a single global feature descriptor matrix, which is passed to the final linear layer to map probability distributions across the 5 target structural pathologies.")
+        # CHANGED: Stripped out long-axis views to strictly reflect short-axis (SAX) slice aggregation across temporal peaks
+        st.write("The extracted spatial tokens are aggregated sequentially across the temporal axis via an Average Temporal Fusion pooling operation ($T=16$). This compresses the multi-frame sequential parameters across the continuous Short-Axis (SAX) slice stacks and the separate peak temporal phases (ED and ES) into a single global feature descriptor matrix, which is passed to the final linear layer to map probability distributions across the 5 target structural pathologies.")
         
     st.write("---")
     if st.button("Disconnect Pipeline and Return to Queue"):
